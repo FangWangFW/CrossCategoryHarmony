@@ -1,0 +1,152 @@
+---
+title: "Second language experience"
+output: html_notebook
+---
+```{r}
+library(ggplot2)
+library(plyr)
+library(tidybayes)
+library(reshape2) 
+library(rlang)
+library(readxl)
+library(Hmisc)
+library(brms)
+library(tidyr)
+library(readxl)
+library(faux)
+```
+
+# Reading the data
+```{r}
+setwd("/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony")
+Exp1PP = read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/EXP1PP.xlsx')
+Exp1VP = read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/EXP1VP.xlsx')
+Exp1PPHarmony<-subset(Exp1PP,select=c("Subject","Condition","PPHarmony","PPItem","Population","PPOrder"))
+Exp1PPHarmony<-na.omit(Exp1PPHarmony)
+Exp1LanExp<-subset(Exp1PP,select=c("Subject","Condition","PPHarmony","PPItem","Population","LanExp"))
+Exp1LanExp_En<-subset(Exp1LanExp, Population=="English")
+Exp1LanExp_En<-na.omit(Exp1LanExp_En)
+Exp1LanExp_Ma<-subset(Exp1LanExp, Population=="Mandarin")
+Exp1LanExp_Ma<-na.omit(Exp1LanExp_Ma)
+```
+
+```{r}
+Exp2PPNP = read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/Exp2PPNP.xlsx')
+Exp2VP = read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/Exp2VP.xlsx')
+Exp2PPNPHarmony<-subset(Exp2PPNP,select=c("Subject","Condition","PhraseHarmony","PhraseItem","PhraseType"))
+Exp2PPNPHarmony<-na.omit(Exp2PPNPHarmony)
+Exp2LanExp<-subset(Exp2PPNP,select=c("Subject","Condition","PhraseHarmony","PhraseItem","PhraseType","LanExp"))
+Exp2LanExp<-subset(Exp2LanExp, PhraseType=="NP" )
+Exp2LanExp<-na.omit(Exp2LanExp)
+```
+
+```{r}
+Exp3PPNP = read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/EXP3PPNP.xlsx')
+Exp3VP=read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/EXP3VP.xlsx')
+Exp3PPNPHarmony<-subset(Exp3PPNP,select=c("Subject","Condition","PhraseHarmony","PhraseItem","PhraseType","PhraseType2"))
+Exp3PPNPHarmony<-na.omit(Exp3PPNPHarmony)
+Exp3NPHarmony<-subset(Exp3PPNPHarmony,PhraseType == "ActiveAdj"|PhraseType=="StativeAdj")
+Exp3LanExp<-subset(Exp3PPNP,select=c("Subject","Condition","PhraseHarmony","PhraseItem","PhraseType2","LanExp"))
+Exp3LanExp_NP<-subset(Exp3LanExp, PhraseType2=="Adj")
+Exp3LanExp_NP<-na.omit(Exp3LanExp_NP)
+Exp3LanExp_PP<-subset(Exp3LanExp, PhraseType2=="PP")
+Exp3LanExp_PP<-na.omit(Exp3LanExp_PP)
+```
+
+# Experiment 1
+## Mandarin speakers
+```{r}
+Exp1LanExp_Ma$Condition<-contr_code_sum(Exp1LanExp_Ma$Condition, omit = "VO")
+Exp1LanExp_Ma$LanExp<-contr_code_sum(Exp1LanExp_Ma$LanExp, omit = "8")
+fit_e1lanexp_ma<- brm(PPHarmony~Condition*LanExp+(1|Subject)+(1|PPItem),prior = c(
+    prior(normal(0,5), class = Intercept),  
+    prior(normal(0,5), class = b)), 
+                data = Exp1LanExp_Ma,cores=4,control = list(adapt_delta = 0.9999, max_treedepth=18),iter=5000,
+                family = bernoulli(link="logit")) 
+summary(fit_e1lanexp_ma)
+```
+
+## English speakers
+```{r}
+Exp1LanExp_En$Condition<-contr_code_sum(Exp1LanExp_En$Condition, omit = "VO")
+Exp1LanExp_En$LanExp<-contr_code_sum(Exp1LanExp_En$LanExp, omit = "OV&NPost")
+fit_e1lanexp_en<- brm(PPHarmony~Condition*LanExp+(1|Subject)+(1|PPItem),prior = c(prior(normal(0,10), class = Intercept),  # alpha, the grand mean
+    prior(normal(0, 5), class = b)), 
+                data = Exp1LanExp_En,cores=4,
+                family = bernoulli(link="logit"),control = list(adapt_delta = 0.99999999, max_treedepth=18),iter=5000) 
+summary(fit_e1lanexp_en)
+```
+
+# Experiment 2
+
+```{r}
+Exp2MeanHarLanExp=ddply(Exp2LanExp,c("LanExp","Subject","Condition"),summarise, Harmony=mean(PhraseHarmony,na.rm=TRUE))
+Exp2MeanHarLanExp$LanExp<-factor(Exp2MeanHarLanExp$LanExp,levels=c("VO&NAdj","OV&AdjN","No dominant&AdjN"),labels=c("VO&NAdj","OV&AdjN","No dominant order\n  in VP&AdjN"))
+Exp2MeanHarLanExp$Condition<-factor(Exp2MeanHarLanExp$Condition,levels=c("VO","OV"),labels=c("VO","OV"))
+myplot2<-function(mydata,x,y,myylabel,myxlabel){
+  ggplot(mydata, aes(x={{x}}, y={{y}}, fill={{x}})) + 
+      geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", 
+                   stackratio = 1, binwidth = 0.004, dotsize=7
+                   )  +
+      facet_grid(.~Condition, scale="free_x", space="free") +stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width=.1, size=0.6) +
+      stat_summary(fun = mean, geom = "point", size=3) +
+    scale_fill_manual(values=c("darkgoldenrod","lightskyblue4","rosybrown")) +
+      theme(legend.position="none") +
+      theme(axis.title.x = element_text(vjust = 0),axis.title.y = element_text(vjust = 0.8)) +
+        theme(axis.title.x = element_text(size=16),axis.text.x = element_text(size=12), 
+              axis.title.y = element_text(size=16), axis.text.y=element_text(size=12), strip.text.x = element_text(size = 16)) +
+      geom_hline(aes(yintercept=.5),linetype="dashed")+  
+    ylim(0,1.01) +
+      ylab({{myylabel}}) +
+        xlab({{myxlabel}}) 
+  
+  }
+Exp2lanexp = myplot2(Exp2MeanHarLanExp,LanExp,Harmony,"Proportion harmonic responses","Second language experience")
+Exp2lanexp
+ggsave(Exp2lanexp,file="Exp2lanexp.png", height = 5, width = 12)
+```
+
+# Experiment 3
+## For noun phrases
+```{r}
+Exp3LanExp_NP$Condition<-contr_code_sum(Exp3LanExp_NP$Condition, omit = "VO")
+Exp3LanExp_NP$LanExp<-contr_code_sum(Exp3LanExp_NP$LanExp, omit = "VO&NAdj")
+fit_e3lanexp_np<- brm(PhraseHarmony~Condition*LanExp+(1|Subject)+(1|PhraseItem),prior = c(prior(normal(0, 5), class = Intercept),
+  prior(normal(0, 5), class = b)),
+                data = Exp3LanExp_NP,cores=4,
+                family = bernoulli(link="logit"),control = list(adapt_delta = 0.99, max_treedepth=18),iter=3000) 
+```
+
+```{r}
+summary(fit_e3lanexp_np)
+```
+
+## For adpositional phrases
+```{r}
+Exp3MeanHarLanExp_PP=ddply(Exp3LanExp_PP,c("LanExp","Subject","Condition"),summarise, Harmony=mean(PhraseHarmony,na.rm=TRUE))
+Exp3MeanHarLanExp_PP$LanExp<-factor(Exp3MeanHarLanExp_PP$LanExp,levels=c("OV&Npost","OV&PrepN", "NoDominantOrder&PrepN"),labels=c("OV&NPost","OV&PreN", "No Dominant Order\n in VP&PrepN"))
+Exp3MeanHarLanExp_PP$Condition<-factor(Exp3MeanHarLanExp_PP$Condition,levels=c("VO","OV"),labels=c("VO","OV"))
+myplot3<-function(mydata,x,y,myylabel,myxlabel){
+  ggplot(mydata, aes(x={{x}}, y={{y}}, fill={{x}})) + 
+      geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", 
+                   stackratio = 1, binwidth = 0.004, dotsize=7
+                   )  +
+      facet_grid(.~Condition, scale="free_x", space="free")+
+      theme(legend.position="none") +scale_fill_manual(
+  values = c("darkorange4",
+    "deepskyblue4",
+    "lavenderblush4"
+    ),drop=T)+
+      theme(axis.title.x = element_text(vjust = 0),axis.title.y = element_text(vjust = 0.8)) +
+        theme(axis.title.x = element_text(size=16),axis.text.x = element_text(size=12), 
+              axis.title.y = element_text(size=16), axis.text.y=element_text(size=12), strip.text.x = element_text(size = 16)) +
+      geom_hline(aes(yintercept=.5),linetype="dashed")+  
+    ylim(0,1.01) +
+      ylab({{myylabel}}) +
+        xlab({{myxlabel}}) 
+  
+}
+Exp3lanexp_pp = myplot3(Exp3MeanHarLanExp_PP,LanExp,Harmony,"Proportion harmonic responses","Second language experience")
+ggsave(Exp3lanexp_pp,file="Exp3lanexp_pp.png", height = 5, width = 12)
+Exp3lanexp_pp
+```
