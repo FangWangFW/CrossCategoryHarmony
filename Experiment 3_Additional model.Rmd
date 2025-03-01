@@ -1,0 +1,63 @@
+---
+title: "Experiment 3_Additional model with informative priors"
+output: html_notebook
+---
+```{r}
+library(ggplot2)
+library(plyr)
+library(reshape2) 
+library(rlang)
+library(readxl)
+library(Hmisc)
+library(brms)
+library(tidyr)
+library(readxl)
+library(faux)
+```
+
+```{r}
+setwd("/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony")
+```
+# Data
+```{r}
+Exp3PPNP = read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/EXP3PPNP.xlsx')
+Exp3VP=read_excel('/Users/s1831038/OneDrive - University of Edinburgh/CrossCategoryHarmony/EXP3VP.xlsx')
+Exp3PPNPHarmony<-subset(Exp3PPNP,select=c("Subject","Condition","PhraseHarmony","PhraseItem","PhraseType","PhraseType2"))
+Exp3Noun<-subset(Exp3VP,select=c("Subject","Condition","NounItem","NounAccuracy","PhraseType"))
+Exp3Verb<-subset(Exp3VP,select=c("Subject","Condition","VerbItem","VerbAccuracy","PhraseType"))
+Exp3VPVocabularyAccuracy<-subset(Exp3VP,select=c("Subject","Condition","VPProductionItem","VPProductionAccuracy","PhraseType"))
+Exp3VPOrder<-subset(Exp3VP,select=c("Subject","Condition","VPProductionItem","VPOrderAccuracy","PhraseType"))
+Exp3VPMatching<-subset(Exp3VP,select=c("Subject","Condition","VPMatchingItem","VPMatchingAccuracy","PhraseType"))
+Exp3AdpAdj<-subset(Exp3VP,select=c("Subject","Condition","AdpAdjItem","AdpAdjAccuracy","PhraseType"))
+Exp3PPNPHarmony<-na.omit(Exp3PPNPHarmony)
+Exp3VPMatching<-na.omit(Exp3VPMatching)
+Exp3LanExp<-subset(Exp3PPNP,select=c("Subject","Condition","PhraseHarmony","PhraseItem","PhraseType2","LanExp"))
+Exp3LanExp_NP<-subset(Exp3LanExp, PhraseType2=="Adj" )
+Exp3LanExp_NP<-na.omit(Exp3LanExp_NP)
+Exp3LanExp_PP<-subset(Exp3LanExp, PhraseType2=="PP" )
+Exp3LanExp_PP<-na.omit(Exp3LanExp_PP)
+```
+
+
+```{r}
+Exp3PPNPHarmony$Condition<-contr_code_sum(Exp3PPNPHarmony$Condition, omit = "VO")
+Exp3PPNPHarmony$PhraseType<-contr_code_helmert(Exp3PPNPHarmony$PhraseType, levels =c("StativeAdj","ActiveAdj","PP"))
+fit_e3 <- brm(PhraseHarmony~Condition*PhraseType+(1|Subject)+(1|PhraseItem),
+                data = Exp3PPNPHarmony,control = list(adapt_delta = 0.99,max_treedepth=11), iter=6000,cores=4,
+                family = bernoulli(link="logit"),
+              prior = c(
+    prior(normal(2, 2.5), class = Intercept),  # alpha, the grand mean
+    prior(normal(-1, 2), class = b, coef = Condition.OVMintercept), 
+    prior(normal(0, 5),class = b, coef = PhraseType.ActiveAdjMStativeAdj),
+prior(normal(1, 2), class = b, coef = PhraseType.PPMStativeAdj.ActiveAdj),  # beta_3
+prior(normal(0, 5), class = b, coef = Condition.OVMintercept:PhraseType.ActiveAdjMStativeAdj),
+    prior(normal(1, 2), class = b, coef = Condition.OVMintercept:PhraseType.PPMStativeAdj.ActiveAdj) ) 
+)
+```
+```{r}
+summary(fit_e3)
+```
+
+
+
+
